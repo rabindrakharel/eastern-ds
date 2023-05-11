@@ -1,0 +1,45 @@
+import random
+import datetime
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pandas as pd
+
+# Generate 3 random names
+names = []
+for i in range(3):
+    names.append(''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=10)))
+
+# Generate random timestamps in UTC format
+timestamps = []
+for i in range(3):
+    dt = datetime.datetime.utcnow() - datetime.timedelta(minutes=random.randint(1, 60*24*365))
+    timestamps.append(dt.strftime('%Y-%m-%d %H:%M:%S'))
+
+# Create a Pandas DataFrame with the names and timestamps
+data = {'name': names, 'date_time': timestamps}
+df = pd.DataFrame(data)
+
+# Convert the date_time column to datetime format
+df['date_time'] = pd.to_datetime(df['date_time'])
+
+# Convert Pandas DataFrame to PyArrow Table
+table = pa.Table.from_pandas(df)
+
+# Write the PyArrow Table to a Parquet file
+with open('example.parquet', 'wb') as f:
+    pq.write_table(table, f)
+
+
+
+
+CREATE  TABLE public.name (
+    name VARCHAR(1000) NOT NULL,
+    date_time TIMESTAMP NOT NULL
+);
+
+    COPY public.name
+FROM 's3://graphvizbinaries1/example.parquet'
+IAM_ROLE 'arn:aws:iam::697155134447:role/service-role/AmazonRedshift-CommandsAccessRole-20221127T171419'
+FORMAT AS PARQUET;
+
+
