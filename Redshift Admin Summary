@@ -1,19 +1,20 @@
 User Resource Consumption in Redshift for Last 36 Hours.
 
 SELECT 
-  DATE_TRUNC('day', sv.start_time) AS date, 
-  sv.username AS user, 
+  DATE_TRUNC('day', CAST(q.starttime AS DATE)) AS date, 
+  q.user_name AS user, 
   SUM(COALESCE(sv.mem,0))/1024/1024/1024 AS memory_consumed_gb,
   SUM(COALESCE(sv.io,0))/1024/1024/1024 AS io_consumed_gb, 
   SUM(COALESCE(sv.cpu,0))/3600 AS cpu_consumed_hours,
   SUM(COALESCE(sv.rows,0)) AS rows_scanned
 FROM 
-  stv_sessions sv
+  stl_query q
+  JOIN stv_sessions sv ON q.query = sv.query
 WHERE 
-  sv.start_time >= DATEADD(hour, -24, GETDATE())
+  q.starttime >= DATEADD(hour, -24, GETDATE())
 GROUP BY 
-  DATE_TRUNC('day', sv.start_time),
-  sv.username
+  DATE_TRUNC('day', CAST(q.starttime AS DATE)),
+  q.user_name
 ORDER BY 
   date ASC, 
   rows_scanned DESC;
