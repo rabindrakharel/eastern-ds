@@ -1,18 +1,23 @@
 User Resource Consumption in Redshift for Last 36 Hours.
 
-SELECT
-  svv_execution_summary.user_name,
-  SUM(svv_execution_summary.memory) / 1024 / 1024 / 1024 AS memory_usage_gb,
-  SUM(svv_execution_summary.rows_processed) AS rows_processed,
-  SUM(svv_execution_summary.scan_bytes) / 1024 / 1024 / 1024 AS scan_bytes_gb
-FROM
-  svv_execution_summary
-WHERE
-  svv_execution_summary.start_time > getdate() - interval '24 hours'
-GROUP BY
-  svv_execution_summary.user_name
-ORDER BY
-  rows_processed DESC;
+SELECT 
+  DATE_TRUNC('day', sv.start_time) AS date, 
+  sv.username AS user, 
+  SUM(COALESCE(sv.mem,0))/1024/1024/1024 AS memory_consumed_gb,
+  SUM(COALESCE(sv.io,0))/1024/1024/1024 AS io_consumed_gb, 
+  SUM(COALESCE(sv.cpu,0))/3600 AS cpu_consumed_hours,
+  SUM(COALESCE(sv.rows,0)) AS rows_scanned
+FROM 
+  stv_sessions sv
+WHERE 
+  sv.start_time >= DATEADD(hour, -24, GETDATE())
+GROUP BY 
+  DATE_TRUNC('day', sv.start_time),
+  sv.username
+ORDER BY 
+  date ASC, 
+  rows_scanned DESC;
+
 
 
 --Top 20 long running queries 
