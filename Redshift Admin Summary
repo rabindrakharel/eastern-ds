@@ -1,5 +1,9 @@
 User Resource Consumption in Redshift for Last 36 Hours.
 
+
+https://github.com/awslabs/amazon-redshift-utils/blob/master/src/AdminScripts/top_queries.sql
+
+
 SELECT 
   DATE_TRUNC('day', CAST(q.starttime AS DATE)) AS date, 
   q.user_name AS user, 
