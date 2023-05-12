@@ -1,1 +1,185 @@
+User Resource Consumption in Redshift for Last 36 Hours.
+
+SELECT
+  svv_execution_summary.user_name,
+  SUM(svv_execution_summary.memory) / 1024 / 1024 / 1024 AS memory_usage_gb,
+  SUM(svv_execution_summary.rows_processed) AS rows_processed,
+  SUM(svv_execution_summary.scan_bytes) / 1024 / 1024 / 1024 AS scan_bytes_gb
+FROM
+  svv_execution_summary
+WHERE
+  svv_execution_summary.start_time > getdate() - interval '24 hours'
+GROUP BY
+  svv_execution_summary.user_name
+ORDER BY
+  rows_processed DESC;
+
+
+--Top 20 long running queries 
+SELECT
+  q.query AS query_text,
+  q.user_name,
+  q.starttime,
+  q.endtime,
+  (q.endtime - q.starttime) / 60 AS duration_minutes,
+  (q.bytes_scanned / 1024 / 1024 / 1024) AS data_processed_gb,
+  q.rows,
+  q.label,
+  p.pid,
+  p.xid
+FROM
+  stl_query q
+JOIN
+  stl_querytext qt
+ON
+  q.query = qt.query
+JOIN
+  stl_wlm_query wq
+ON
+  q.query = wq.query
+JOIN
+  stv_recents r
+ON
+  q.query = r.query
+JOIN
+  pg_stat_activity p
+ON
+  r.pid = p.pid
+WHERE
+  (q.label NOT IN ('JDBC', 'JDBC Hive')) -- exclude JDBC queries
+  AND (q.starttime >= dateadd(hour, -24, getdate())) -- consider only the last 24 hours
+  AND (q.query NOT LIKE '/*%%') -- exclude internal queries
+ORDER BY
+  duration_minutes DESC
+LIMIT
+  20;
+
+
+
+--Top 20 large tables. 
+SELECT 
+  n.nspname AS schema_name, 
+  c.relname AS table_name, 
+  u.usename AS owner,
+  s.rows AS num_rows,
+  s.size / 1024 / 1024 / 1024 AS size_gb
+FROM 
+  stv_tbl_perm p 
+JOIN 
+  pg_class c 
+ON 
+  p.id = c.oid 
+JOIN 
+  pg_namespace n 
+ON 
+  c.relnamespace = n.oid 
+JOIN 
+  pg_user u 
+ON 
+  c.relowner = u.usesysid
+JOIN 
+  svv_table_info_summary s
+ON 
+  s.table_id = p.id
+WHERE 
+  n.nspname NOT LIKE 'pg_%' AND 
+  n.nspname != 'information_schema' AND 
+  s.size > 0
+ORDER BY 
+  s.size DESC
+LIMIT 
+  20;
+
+
+
+
+--Top copy command failures. 
+SELECT 
+  pid,
+  query,
+  user_name,
+  DATEDIFF(second, starttime, endtime) AS total_run_time,
+  scan_size,
+  rows,
+  error AS error_message
+FROM 
+  stl_load_errors 
+WHERE 
+  error IS NOT NULL
+ORDER BY 
+  starttime DESC;
+
+
+
+
+--Idle sessions
+SELECT 
+  pid,
+  usename AS username,
+  starttime,
+  endtime,
+  DATEDIFF(minute, starttime, endtime) AS total_minutes,
+  NVL((CAST(scan_bytes AS float) / (1024*1024*1024)), 0) AS data_processed_gb
+FROM 
+  stv_sessions 
+WHERE 
+  status = 'Idle'
+ORDER BY 
+  starttime DESC;
+  
+--Query errors  
+  SELECT 
+  query,
+  pid,
+  starttime,
+  endtime,
+  user_name,
+  error
+FROM 
+  stl_query 
+WHERE 
+  error IS NOT NULL 
+  AND starttime >= DATEADD(hour, -24, GETDATE()) 
+  AND (querytxt LIKE 'CREATE%' OR querytxt LIKE 'ALTER%' OR querytxt LIKE 'DROP%' OR querytxt LIKE 'INSERT%' OR querytxt LIKE 'UPDATE%' OR querytxt LIKE 'DELETE%')
+ORDER BY 
+  starttime DESC;
+
+
+--Top 20 skewed tables. 
+SELECT 
+  n.nspname AS schema_name, 
+  c.relname AS table_name, 
+  u.usename AS owner,
+  s.rows AS num_rows,
+  s.size / 1024 / 1024 / 1024 AS size_gb,
+  s.skew_rows AS num_skew_rows,
+  (s.skew_rows::float / nullif(s.rows, 0)) AS skew_ratio
+FROM 
+  stv_tbl_perm p 
+JOIN 
+  pg_class c 
+ON 
+  p.id = c.oid 
+JOIN 
+  pg_namespace n 
+ON 
+  c.relnamespace = n.oid 
+JOIN 
+  pg_user u 
+ON 
+  c.relowner = u.usesysid
+JOIN 
+  svv_table_info_summary s
+ON 
+  s.table_id = p.id
+WHERE 
+  n.nspname NOT LIKE 'pg_%' AND 
+  n.nspname != 'information_schema' AND 
+  s.size > 0 AND 
+  s.skew_rows > 0
+ORDER BY 
+  skew_ratio DESC, 
+  s.size DESC
+LIMIT 
+  20;
 
