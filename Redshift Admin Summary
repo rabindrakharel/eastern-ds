@@ -2,26 +2,23 @@ User Resource Consumption in Redshift for Last 36 Hours.
 
 
 https://github.com/awslabs/amazon-redshift-utils/blob/master/src/AdminScripts/top_queries.sql
-
-
 SELECT 
-  DATE_TRUNC('day', CAST(q.starttime AS DATE)) AS date, 
-  q.user_name AS user, 
-  SUM(COALESCE(sv.mem,0))/1024/1024/1024 AS memory_consumed_gb,
-  SUM(COALESCE(sv.io,0))/1024/1024/1024 AS io_consumed_gb, 
-  SUM(COALESCE(sv.cpu,0))/3600 AS cpu_consumed_hours,
-  SUM(COALESCE(sv.rows,0)) AS rows_scanned
+  pg_user.usename AS user,
+  DATE_TRUNC('day', qm.starttime) AS date,
+  COUNT(qm.query) AS num_queries,
+  SUM(qm.elapsedtime) / 60.0 AS total_duration_minutes,
+  ROUND(SUM(qm.bytes_scanned) / (1024.0 * 1024.0 * 1024.0), 2) AS total_scanned_gb,
+  SUM(qm.rows) AS total_rows
 FROM 
-  stl_query q
-  JOIN stv_sessions sv ON q.query = sv.query
+  svl_query_metrics_summary qm
+  JOIN pg_user ON qm.userid = pg_user.usesysid
 WHERE 
-  q.starttime >= DATEADD(hour, -24, GETDATE())
+  qm.starttime >= DATEADD('day', -1, GETDATE())
 GROUP BY 
-  DATE_TRUNC('day', CAST(q.starttime AS DATE)),
-  q.user_name
+  1, 2
 ORDER BY 
-  date ASC, 
-  rows_scanned DESC;
+  1, 2
+
 
 
 
