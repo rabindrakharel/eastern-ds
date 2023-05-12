@@ -182,4 +182,20 @@ ORDER BY
   s.size DESC
 LIMIT 
   20;
+  
+  
+  SELECT 
+  wlm_group, 
+  wlm_user, 
+  SUM(total_queue_wait_time) AS total_wait_time, 
+  SUM(total_queue_wait_time) / (SUM(total_queue_wait_time) + SUM(total_exec_time)) AS concurrency_usage 
+FROM 
+  stl_wlm_query 
+WHERE 
+  start_time >= DATEADD(hour, -24, GETDATE()) 
+GROUP BY 
+  wlm_group, wlm_user 
+ORDER BY 
+  total_wait_time DESC;
+
 
